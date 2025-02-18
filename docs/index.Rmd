@@ -1,0 +1,32 @@
+---
+title: "#tidytuesday"
+author: "Susanne Flach"
+date: "2025-02-18"
+output: 
+  html_document:
+    theme: flatly
+    toc: true
+    toc_float: true
+    code_folding: hide
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(suzR)
+library(hrbrthemes)
+
+theme_set(theme_ipsum_gs())
+```
+
+## 2025
+
+### Week 7
+
+```{r}
+
+```
+
+
+## 2024
