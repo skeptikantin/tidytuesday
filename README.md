@@ -1,2 +1,2 @@
-# titytuesday
+# tidytuesday
 My contributions to #tidytuesday
