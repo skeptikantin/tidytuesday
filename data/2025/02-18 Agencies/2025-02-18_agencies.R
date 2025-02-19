@@ -22,63 +22,110 @@ data(county)
 
 # wrangle -----------------------------------------------------------------
 
-df_state <- map_data("county")
+## map data ----
+map_states <- map_data("county") |> 
+  rename(county = subregion,
+         state = region)
 
-df_base <- agencies |>
-  filter(
-    longitude < -10,
-    longitude > -125
-  ) |>
-  mutate(
-    county = tolower(county),
-    county_split = str_split(county, ", ")
-  ) |>
-  unnest(county_split) |>
-  group_by(county = county_split) |>
-  summarise(
-    p = mean(is_nibrs),
-    n = sum(is_nibrs)
-  )
+## agencies data ----
+agencies <- agencies |> 
+  # remove alaska/hawaii
+  filter(!state %in% c("Alaska", "Hawaii")) |> 
+  # mutate county name to match values in map_states:
+  mutate(across(all_of(c("county", "state")), tolower)) |> 
+  mutate(county = gsub("^(\\S+?), .*$", "\\1", county)) |>
+  # add number of agencies per county:
+  group_by(county, state) |> 
+  mutate(n_agencies = n()) |> 
+  ungroup()
 
-df_base <- df_state |>
-  left_join(df_base, join_by(subregion == county))
+# determine mean distances between agencies (~5mins)
+mtx <- agencies |> 
+  select(ori, latitude, longitude) |> 
+  filter(!is.na(latitude)) |> 
+  sf::st_as_sf(coords = c("longitude", "latitude"), crs = 4326)
+
+mtx_dist <- mtx |> 
+  sf::st_distance()
+rownames(mtx_dist) <- mtx$ori
+
+# for each row, fetch lowest N values, determine mean
+agencies_geo_inf <- apply(mtx_dist, 1, function(x) {
+  # mean distance to nearest N agencies:
+  means <- sort(x)[1:6]
+  means <- mean(means)/1609.34
+  # number of agencies within N miles:
+  within_1 <- sort(x)[2:length(x)]/1609.34
+  within_1 <- sum(within_1 < 10)
+  # combine
+  out <- c(means, within_1)
+  }) |> 
+  t() |> as.data.frame() |> 
+  tibble::rownames_to_column("ori") |> 
+  rename(mean_dist = 2, nearby_agencies = 3)
+
+# add to agencies meta:
+agencies <- agencies |> 
+  left_join(agencies_geo_inf, join_by(ori)) |> 
+  # mean distance for KY0710900 needs resetting b/c erroneous lat/long:
+  mutate(mean_dist = case_when(ori == "KY0710900" ~ NA,
+                               .default = mean_dist)) |> 
+  # calculate county mean distances:
+  group_by(state, county) |> 
+  mutate(mean_dist_county = mean(mean_dist, na.rm = TRUE),
+         median_nearby_county = median(nearby_agencies, na.rm = TRUE)) |> 
+  ungroup()
+
+rm(mtx, mtx_dist, agencies_geo_inf)
+
+## county meta ----
+df_county <- county |> 
+  filter(!state %in% c("Alaska", "Hawaii")) |> 
+  # clean county name:
+  mutate(county = str_remove(name, "\\."), .after = name) |> 
+  mutate(county = str_remove(county, " *(Borough|County|Census Area|Municipality|Parish)")) |> 
+  # lower county because that's how it is in agencies:
+  mutate(across(all_of(c("county", "state")), tolower)) |> 
+  # select cols:
+  select(county, state, pop2017, poverty, homeownership, unemployment_rate)
+
+## combine ----
+
+df_data <- df_county |> 
+  left_join(agencies |> select(county, state, n_agencies, mean_dist_county) |> distinct(), join_by(county, state)) |> 
+  mutate(agencies_per_capita = n_agencies / pop2017 * 10000)
+
+# final df to plot:
+map_states <- map_states |> 
+  left_join(df_data) |> 
+  as_tibble()
 
 
-ggplot(map.df, aes(x=long, y=lat, group=group, fill=obesity)) + 
-  geom_polygon()+coord_map()+theme_void()
+# description -------------------------------------------------------------
 
-df_base |> 
-  ggplot(aes(x=long, y=lat, group=group, fill = n)) +
-  geom_polygon() + 
-  coord_map() + 
-  scale_fill_distiller(palette = "Greens", guide = "none", direction = 1) + theme_void()
+# how many counties have another agency within 5 miles?
+agencies |> 
+  mutate(within_5 = if_else())
 
-ggplot() +
-  geom_map(data = df_state, map = df_state,
-           aes(long, lat, map_id = region)) +
-  hrbrthemes::theme_ipsum_gs() +
-  theme_void()
+# visualize ---------------------------------------------------------------
 
+map_states |> 
+  ggplot(aes(log(mean_dist_county))) +
+  geom_histogram()
 
-## sandbox
-library(ggplot2)
-# this creates an example formatted as your obesity.map - you have this already...
-set.seed(1)    # for reproducible example
-map.county2 <- map_data('county')
-counties   <- unique(map.county[,5:6])
-obesity_map <- data.frame(state_names=counties$region, 
-                          county_names=counties$subregion, 
-                          obesity= runif(nrow(counties), min=0, max=100))
-
-# you start here...
-library(data.table)   # use data table merge - it's *much* faster
-map.county2 <- data.table(map_data('county'))
-setkey(map.county,region,subregion)
-obesity_map <- data.table(obesity_map)
-setkey(obesity_map,state_names,county_names)
-map.df      <- map.county[obesity_map]
-
-ggplot(map.df, aes(x=long, y=lat, group=group, fill=obesity)) + 
-  geom_polygon()+coord_map()+theme_void()
+ggplot(map_states, aes(x=long, y=lat, group=group, fill=mean_dist_county)) + 
+  geom_polygon() +
+  labs(title = "Mean distance between agencies",
+       subtitle = "stuff",
+       fill = "Miles") +
+  scale_fill_viridis_c(option = 'D') +
+  coord_map() +
+  theme_void(base_family = "Goldman Sans Condensed") +
+  theme(legend.position = "top",
+        legend.box = "horizontal",
+        legend.key.width = unit(1, "cm"),
+        legend.key.height = unit(.1, "cm")) +
+  guides(fill = guide_colourbar(title.position = "top", title.hjust = 1),
+         size = guide_legend(title.position = "top", title.hjust = 0.5))
 
 
