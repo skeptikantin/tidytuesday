@@ -55,14 +55,15 @@ agencies_geo_inf <- apply(mtx_dist, 1, function(x) {
   means <- sort(x)[1:6]
   means <- mean(means)/1609.34
   # number of agencies within N miles:
-  within_1 <- sort(x)[2:length(x)]/1609.34
-  within_1 <- sum(within_1 < 10)
+  within_n <- sort(x)[2:length(x)]/1609.34
+  within_10 <- sum(within_n < 11)
+  within_5 <- sum(within_n < 5)
   # combine
-  out <- c(means, within_1)
+  out <- c(means, within_10, within_5)
   }) |> 
   t() |> as.data.frame() |> 
   tibble::rownames_to_column("ori") |> 
-  rename(mean_dist = 2, nearby_agencies = 3)
+  rename(mean_dist = 2, nearby_agencies_10 = 3, nearby_agencies_5 = 4)
 
 # add to agencies meta:
 agencies <- agencies |> 
@@ -73,7 +74,8 @@ agencies <- agencies |>
   # calculate county mean distances:
   group_by(state, county) |> 
   mutate(mean_dist_county = mean(mean_dist, na.rm = TRUE),
-         median_nearby_county = median(nearby_agencies, na.rm = TRUE)) |> 
+         median_nearby_county_10 = median(nearby_agencies_10, na.rm = TRUE),
+         median_nearby_county_5 = median(nearby_agencies_5, na.rm = TRUE)) |> 
   ungroup()
 
 rm(mtx, mtx_dist, agencies_geo_inf)
@@ -100,12 +102,19 @@ map_states <- map_states |>
   left_join(df_data) |> 
   as_tibble()
 
+save(map_states, file = "data/2025/02-18 Agencies/clean_data.RData")
 
 # description -------------------------------------------------------------
 
 # how many counties have another agency within 5 miles?
 agencies |> 
-  mutate(within_5 = if_else())
+  filter(!is.na(nearby_agencies_5)) |> 
+  mutate(nearby = if_else(nearby_agencies_5 > 0, "yes", "no")) |> 
+  count(nearby) |> 
+  mutate(prop = n/sum(n))
+
+# 94% of agencies have another agency within 10 miles
+# 
 
 # visualize ---------------------------------------------------------------
 
