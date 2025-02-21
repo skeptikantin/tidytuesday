@@ -1,7 +1,7 @@
 ---
 title: "#tidytuesday"
 author: "Susanne Flach"
-date: "2025-02-18"
+date: "2025-02-21"
 output: 
   html_document:
     theme: flatly
@@ -19,14 +19,14 @@ library(hrbrthemes)
 
 theme_set(theme_ipsum_gs())
 ```
+[#tidytuesday](https://github.com/rfordatascience/tidytuesday/tree/main) is a weekly project in the Data Science with R community to clean, explore, visualize and analyze community-curated data sets. Attempting to keep time allocated to each week's dataset to around 2-3 hours.
 
 ## 2025
 
 ### Week 7
 
-```{r}
+#tidytuesday: [Agencies from the FBI Crime Data API](https://github.com/rfordatascience/tidytuesday/tree/main/data/2025/2025-02-18)
 
-```
+[My code](https://github.com/skeptikantin/tidytuesday/tree/main/data/2025/02-18%20Agencies) that cleaned and enriched the data to produce this plot of US agencies reporting to the FBI crime data base.
 
-
-## 2024
+<img src="../data/2025/02-18 Agencies/2025-02-18_agencies_distances.png" width="80%" style="display: block; margin: left;" />
